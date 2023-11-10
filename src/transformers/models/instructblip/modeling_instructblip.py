@@ -1317,7 +1317,7 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel):
     )
     def forward(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: Tuple[torch.FloatTensor],
         qformer_input_ids: torch.FloatTensor,
         qformer_attention_mask: Optional[torch.LongTensor] = None,
         input_ids: Optional[torch.FloatTensor] = None,
@@ -1375,56 +1375,121 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel):
 
         # step 1: forward the images through the vision encoder,
         # to get image embeddings of shape (batch_size, seq_len, hidden_size)
-        vision_outputs = self.vision_model(
-            pixel_values=pixel_values,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
 
-        # print(vision_outputs)
+        all_inputs = []
+        all_masks = []
+        batch_size = len(pixel_values)
+        # print(pixel_values.shape) #1,5,3,244,244
+        for i in range(batch_size):
+            
+            
+            pixel_values0 = pixel_values[i]
+            
+            #ouputs for one text input with multiple images
+            vision_outputs = self.vision_model(
+                pixel_values=pixel_values0,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+                return_dict=return_dict,
+            )
 
-        image_embeds = vision_outputs[0]
+            image_embeds = vision_outputs[0]
 
-        d1, d2, d3 = image_embeds.shape
+            # print(image_embeds.shape) #5,257,1408
 
-        image_embeds = image_embeds.view(1, -1, d3)
-        # print(image_embeds.shape)
+            image_attention_mask = torch.ones(image_embeds.size()[:-1], dtype=torch.long, device=image_embeds.device)
 
-        # step 2: forward the query tokens through the QFormer, using the image embeddings for cross-attention
-        image_attention_mask = torch.ones(image_embeds.size()[:-1], dtype=torch.long, device=image_embeds.device)
+            # print("image_attention_mask",image_attention_mask.shape) #5,257
 
-        # difference with BLIP-2 here: we also feed the instruction prompt to the Q-Former
-        query_tokens = self.query_tokens.expand(image_embeds.shape[0], -1, -1)
-        query_attention_mask = torch.ones(query_tokens.size()[:-1], dtype=torch.long, device=image_embeds.device)
-        if qformer_attention_mask is None:
-            qformer_attention_mask = torch.ones_like(qformer_input_ids)
-        qformer_attention_mask = torch.cat([query_attention_mask, qformer_attention_mask], dim=1)
-        query_outputs = self.qformer(
-            input_ids=qformer_input_ids,
-            attention_mask=qformer_attention_mask,
-            query_embeds=query_tokens,
-            encoder_hidden_states=image_embeds,
-            encoder_attention_mask=image_attention_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-        query_output = query_outputs[0][:, : query_tokens.size(1), :]
+            # difference with BLIP-2 here: we also feed the instruction prompt to the Q-Former
+            query_tokens = self.query_tokens.expand(image_embeds.shape[0], -1, -1)
 
-        # step 3: use the language model, conditioned on the query outputs and the prompt
-        language_model_inputs = self.language_projection(query_output)
-        language_model_attention_mask = torch.ones(
-            language_model_inputs.size()[:-1], dtype=torch.long, device=language_model_inputs.device
-        )
+            # print("query_tokens",query_tokens.shape) #5,32,728
+
+            # print("qformer_input_ids", qformer_input_ids.shape)#1,376
+
+            qformer_input_ids0 = qformer_input_ids[i].expand(image_embeds.shape[0], -1)
+
+            # print("qformer_input_ids0",qformer_input_ids0.shape)
+    
+            query_attention_mask = torch.ones(query_tokens.size()[:-1], dtype=torch.long, device=image_embeds.device)
+
+            # print("query_attention_mask",query_attention_mask.shape) 
+
+            qformer_attention_mask0 = torch.ones_like(qformer_input_ids0)
+
+            # print("qformer_attention_mask0",qformer_attention_mask0.shape) 
+           
+            qformer_attention_mask0 = torch.cat([query_attention_mask, qformer_attention_mask0], dim=1)
+
+            query_outputs = self.qformer(
+                input_ids=qformer_input_ids0,
+                attention_mask=qformer_attention_mask0,
+                query_embeds=query_tokens,
+                encoder_hidden_states=image_embeds,
+                encoder_attention_mask=image_attention_mask,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+                return_dict=return_dict,
+            )
+
+            # print("query_outputs[0]",query_outputs[0].shape)
+
+            query_output = query_outputs[0][:, : query_tokens.size(1), :]
+
+            # print("query_output",query_output.shape)
+            
+            language_model_inputs = self.language_projection(query_output)
+
+            # print("language_model_inputs",language_model_inputs.shape)
+
+            language_model_attention_mask = torch.ones(
+                language_model_inputs.size()[:-1], dtype=torch.long, device=language_model_inputs.device
+            )
+            # print("language_model_attention_mask",language_model_attention_mask.shape)
+            
+            language_model_inputs = language_model_inputs.reshape(1,-1,language_model_inputs.shape[2])
+            language_model_attention_mask = language_model_attention_mask.reshape(1,-1)
+
+            all_inputs.append(language_model_inputs)
+            all_masks.append(language_model_attention_mask)
+        
+        max_dim1 = max([x.shape[1] for x in all_inputs])
+        for i in range(len(all_inputs)):
+            if all_inputs[i].shape[1] < max_dim1:
+                pad = torch.zeros(
+                    (all_inputs[i].shape[0], max_dim1 - all_inputs[i].shape[1], all_inputs[i].shape[2]),
+                    device=all_inputs[i].device,
+                )
+                all_inputs[i] = torch.cat([all_inputs[i], pad], dim=1)
+
+        #very slight inefficiency here, could have padded together
+        max_dim1 = max([x.shape[1] for x in all_masks])
+        for i in range(len(all_masks)):
+            if all_masks[i].shape[1] < max_dim1:
+                pad = torch.zeros(
+                    (all_masks[i].shape[0], max_dim1 - all_masks[i].shape[1]), device=all_masks[i].device
+                )
+                all_masks[i] = torch.cat([all_masks[i], pad], dim=1)
+
+        language_model_inputs = torch.cat(all_inputs, dim=0)
+
+        # print("Xlanguage_model_inputs",language_model_inputs.shape)
+
+        language_model_attention_mask = torch.cat(all_masks, dim=0)
+
+        # print("Xlanguage_model_attention_mask",language_model_attention_mask.shape)
 
         inputs_embeds = self.language_model.get_input_embeddings()(input_ids)
-
         inputs_embeds = torch.cat([language_model_inputs, inputs_embeds.to(language_model_inputs.device)], dim=1)
-
+        
+        
         if attention_mask is None:
             attention_mask = torch.ones_like(input_ids)
+
         attention_mask = torch.cat([language_model_attention_mask.to(attention_mask.device), attention_mask], dim=1)
+
+        
 
         if self.config.use_decoder_only_language_model:
             outputs = self.language_model(
@@ -1477,7 +1542,7 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel):
     @torch.no_grad()
     def generate(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: Tuple[torch.FloatTensor],
         qformer_input_ids: Optional[torch.LongTensor] = None,
         qformer_attention_mask: Optional[torch.LongTensor] = None,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1506,36 +1571,70 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel):
             # preprocess for `accelerate`
             self._preprocess_accelerate()
 
-        batch_size = pixel_values.shape[0]
-        image_embeds = self.vision_model(pixel_values, return_dict=True).last_hidden_state
+        batch_size = len(pixel_values)
+        # image_embedsX = self.vision_model(pixel_values, return_dict=True).last_hidden_state
 
-        
-        d1, d2, d3 = image_embeds.shape
+        all_inputs = []
+        all_masks = []
 
-        image_embeds = image_embeds.view(1, -1, d3)
-        
+        for i in range(batch_size):
+            pixel_values0 = pixel_values[i]
 
-        image_attention_mask = torch.ones(image_embeds.size()[:-1], dtype=torch.long, device=image_embeds.device)
+            image_embeds = self.vision_model(pixel_values0, return_dict=True).last_hidden_state
 
-        query_tokens = self.query_tokens.expand(image_embeds.shape[0], -1, -1)
-        query_attention_mask = torch.ones(query_tokens.size()[:-1], dtype=torch.long, device=image_embeds.device)
-        if qformer_attention_mask is None:
-            qformer_attention_mask = torch.ones_like(qformer_input_ids)
-        qformer_attention_mask = torch.cat([query_attention_mask, qformer_attention_mask], dim=1)
-        query_outputs = self.qformer(
-            input_ids=qformer_input_ids,
-            attention_mask=qformer_attention_mask,
-            query_embeds=query_tokens,
-            encoder_hidden_states=image_embeds,
-            encoder_attention_mask=image_attention_mask,
-            return_dict=True,
-        )
-        query_output = query_outputs.last_hidden_state[:, : query_tokens.size(1), :]
+            image_attention_mask = torch.ones(image_embeds.size()[:-1], dtype=torch.long, device=image_embeds.device)
 
-        language_model_inputs = self.language_projection(query_output)
-        language_attention_mask = torch.ones(
-            language_model_inputs.size()[:-1], dtype=torch.long, device=language_model_inputs.device
-        )
+            query_tokens = self.query_tokens.expand(image_embeds.shape[0], -1, -1)
+            query_attention_mask = torch.ones(query_tokens.size()[:-1], dtype=torch.long, device=image_embeds.device)
+           
+            qformer_input_ids0 = qformer_input_ids[i].expand(image_embeds.shape[0], -1)
+            qformer_attention_mask0 = torch.ones_like(qformer_input_ids0)
+            qformer_attention_mask0 = torch.cat([query_attention_mask, qformer_attention_mask0], dim=1)
+            
+            
+            query_outputs = self.qformer(
+                input_ids=qformer_input_ids0,
+                attention_mask=qformer_attention_mask0,
+                query_embeds=query_tokens,
+                encoder_hidden_states=image_embeds,
+                encoder_attention_mask=image_attention_mask,
+                return_dict=True,
+            )
+
+            query_output = query_outputs.last_hidden_state[:, : query_tokens.size(1), :]
+
+            language_model_inputs = self.language_projection(query_output)
+            language_attention_mask = torch.ones(
+                language_model_inputs.size()[:-1], dtype=torch.long, device=language_model_inputs.device
+            )
+
+            language_model_inputs = language_model_inputs.reshape(1,-1,language_model_inputs.shape[2])
+            language_attention_mask = language_attention_mask.reshape(1,-1)
+
+            all_inputs.append(language_model_inputs)
+            all_masks.append(language_attention_mask)
+
+        # if the 0 dimension of all_inputs doesn't match, we need to pad
+
+        max_dim1 = max([x.shape[1] for x in all_inputs])
+        for i in range(len(all_inputs)):
+            if all_inputs[i].shape[1] < max_dim1:
+                pad = torch.zeros(
+                    (all_inputs[i].shape[0], max_dim1 - all_inputs[i].shape[1], all_inputs[i].shape[2]),
+                    device=all_inputs[i].device,
+                )
+                all_inputs[i] = torch.cat([all_inputs[i], pad], dim=1)
+
+        max_dim1 = max([x.shape[1] for x in all_masks])
+        for i in range(len(all_masks)):
+            if all_masks[i].shape[1] < max_dim1:
+                pad = torch.zeros(
+                    (all_masks[i].shape[0], max_dim1 - all_masks[i].shape[1]), device=all_masks[i].device
+                )
+                all_masks[i] = torch.cat([all_masks[i], pad], dim=1)
+
+        language_model_inputs = torch.cat(all_inputs, dim=0)
+        language_attention_mask = torch.cat(all_masks, dim=0)
 
         if input_ids is None:
             input_ids = (
@@ -1545,6 +1644,9 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel):
             )
         if attention_mask is None:
             attention_mask = torch.ones_like(input_ids)
+
+
+        
         attention_mask = torch.cat([language_attention_mask, attention_mask.to(language_attention_mask.device)], dim=1)
 
         # concatenate query embeddings with prompt embeddings
