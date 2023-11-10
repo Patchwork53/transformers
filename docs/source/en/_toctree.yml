@@ -71,6 +71,10 @@
       title: Zero-shot image classification
     - local: tasks/monocular_depth_estimation
       title: Depth estimation
+    - local: tasks/image_to_image
+      title: Image-to-Image
+    - local: tasks/knowledge_distillation_for_image_classification
+      title: Knowledge Distillation for Computer Vision
     title: Computer Vision
   - isExpanded: false
     sections:
@@ -88,6 +92,13 @@
     - local: generation_strategies
       title: Customize the generation strategy
     title: Generation
+  - isExpanded: false
+    sections:
+    - local: tasks/idefics
+      title: Image tasks with IDEFICS
+    - local: tasks/prompting
+      title: LLM prompting guide
+    title: Prompting
   title: Task Guides
 - sections:
   - local: fast_tokenizers
@@ -98,6 +109,8 @@
     title: Use model-specific APIs
   - local: custom_models
     title: Share a custom model
+  - local: chat_templating
+    title: Templates for chat models
   - local: sagemaker
     title: Run training on Amazon SageMaker
   - local: serialization
@@ -142,13 +155,9 @@
     title: Efficient training techniques
   - sections:
     - local: perf_infer_cpu
-      title: Inference on CPU
+      title: CPU inference
     - local: perf_infer_gpu_one
-      title: Inference on one GPU
-    - local: perf_infer_gpu_many
-      title: Inference on many GPUs
-    - local: perf_infer_special
-      title: Inference on Specialized Hardware
+      title: GPU inference
     title: Optimizing inference
   - local: big_models
     title: Instantiating a big model
@@ -198,6 +207,8 @@
     title: Pipelines for webserver inference
   - local: model_memory_anatomy
     title: Model training anatomy
+  - local: llm_tutorial_optimization
+    title: Getting the most out of LLMs
   title: Conceptual guides
 - sections:
   - sections:
@@ -327,6 +338,8 @@
         title: FSMT
       - local: model_doc/funnel
         title: Funnel Transformer
+      - local: model_doc/fuyu
+        title: Fuyu
       - local: model_doc/openai-gpt
         title: GPT
       - local: model_doc/gpt_neo
@@ -377,6 +390,8 @@
         title: MegatronBERT
       - local: model_doc/megatron_gpt2
         title: MegatronGPT2
+      - local: model_doc/mistral
+        title: Mistral
       - local: model_doc/mluke
         title: mLUKE
       - local: model_doc/mobilebert
@@ -407,6 +422,8 @@
         title: Pegasus
       - local: model_doc/pegasus_x
         title: PEGASUS-X
+      - local: model_doc/persimmon
+        title: Persimmon
       - local: model_doc/phobert
         title: PhoBERT
       - local: model_doc/plbart
@@ -497,7 +514,7 @@
       - local: model_doc/dinat
         title: DiNAT
       - local: model_doc/dinov2
-        title: DINO V2
+        title: DINOV2
       - local: model_doc/dit
         title: DiT
       - local: model_doc/dpt
@@ -564,6 +581,8 @@
         title: ViTDet
       - local: model_doc/vit_mae
         title: ViTMAE
+      - local: model_doc/vitmatte
+        title: ViTMatte
       - local: model_doc/vit_msn
         title: ViTMSN
       - local: model_doc/vivit
@@ -591,6 +610,8 @@
         title: MusicGen
       - local: model_doc/pop2piano
         title: Pop2Piano
+      - local: model_doc/seamless_m4t
+        title: Seamless-M4T
       - local: model_doc/sew
         title: SEW
       - local: model_doc/sew-d
@@ -634,6 +655,8 @@
         title: BLIP-2
       - local: model_doc/bridgetower
         title: BridgeTower
+      - local: model_doc/bros
+        title: BROS
       - local: model_doc/chinese_clip
         title: Chinese-CLIP
       - local: model_doc/clip
@@ -656,6 +679,8 @@
         title: IDEFICS
       - local: model_doc/instructblip
         title: InstructBLIP
+      - local: model_doc/kosmos-2
+        title: KOSMOS-2
       - local: model_doc/layoutlm
         title: LayoutLM
       - local: model_doc/layoutlmv2
@@ -672,10 +697,14 @@
         title: MatCha
       - local: model_doc/mgp-str
         title: MGP-STR
+      - local: model_doc/nougat
+        title: Nougat
       - local: model_doc/oneformer
         title: OneFormer
       - local: model_doc/owlvit
         title: OWL-ViT
+      - local: model_doc/owlv2
+        title: OWLv2
       - local: model_doc/perceiver
         title: Perceiver
       - local: model_doc/pix2struct
