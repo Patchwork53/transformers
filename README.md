@@ -34,7 +34,7 @@ limitations under the License.
 Vanilla InstructBLIP can only take (image, text) pair as input. This fork effectively allows ([image1,image2,...,imageM], text)
 From a high level, the ViT and the QFormer treat images from one text input as a minibatch. The QFormer's outputs are reshaped and concatenated. Then it is prepended to the text embeddings fed to the Language Model. InstructBLIP can now successfully pull information from multiple images per text input, however it doesn't understand that it's looking at M separate images, treating all M images as part of the same scene.
 
-This model can be trained normally but both training and inference speeds are moderately bottlenecked due to the need to process multiple images. The current implementation has a runtime of O(LanguageModel(N)+QFormer_ViT(N\timesM)) instead of O(LanguageModel(N)+QFormer_ViT(N)).
+This model can be trained normally but both training and inference speeds are moderately bottlenecked due to the need to process multiple images. The current implementation has a runtime of $O(LanguageModel(N) + QFormer\_ViT(N \times M))$ instead of $O(LanguageModel(N) + QFormer\_ViT(N))$.
 
 [Test Demo](https://www.kaggle.com/sameen53/instructblip-multi-image-test)
 
